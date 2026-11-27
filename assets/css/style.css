@@ -135,14 +135,14 @@ table.kv td { font-weight: 600; }
 .lb.lon .lb-fields { flex: 0 0 60%; }
 .lb.lon .lb-row { display: flex; gap: 2mm; line-height: 1.4; }
 .lb.lon .lb-qr { flex: 1; display: flex; justify-content: center; align-items: flex-start; }
-.lb.lon .lb-qr canvas { width: 30mm; height: 30mm; }
+.lb.lon .lb-qr canvas, .lb.lon .lb-qr img { width: 30mm; height: 30mm; }
 /* Layout vừa 63.3x39.6 (v3) */
 .lb.vua { padding: 2mm; font-size: 7.4pt; }
 .lb.vua .lb-unit { font-size: 8.6pt; padding-bottom: 0.8mm; margin-bottom: 1.4mm; }
 .lb.vua .lb-body { display: flex; }
 .lb.vua .lb-lines { flex: 0 0 60%; line-height: 1.45; }
 .lb.vua .lb-qr { flex: 1; display: flex; justify-content: center; align-items: flex-start; }
-.lb.vua .lb-qr canvas { width: 21.5mm; height: 21.5mm; }
+.lb.vua .lb-qr canvas, .lb.vua .lb-qr img { width: 21.5mm; height: 21.5mm; }
 
 @page { size: A4; margin: 0; }
 @media print {
