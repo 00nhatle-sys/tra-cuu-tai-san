@@ -47,16 +47,51 @@
     <button id="next" class="btn secondary small">Trang sau →</button>
   </div>
   <p id="search-msg" class="msg"></p>
+
+  <div class="card" style="margin-top:18px">
+    <b>Nhập dữ liệu tài sản từ file Excel</b>
+    <p class="small muted">Chức năng quản trị: chọn file Excel kiểm kê (định dạng gốc có nhiều dòng tiêu đề cũng đọc được) hoặc file có sheet DATA như mẫu. Web đọc file ngay trên máy này, cho xem trước, rồi mới gửi vào Google Sheet theo từng lô. Khi nhập sẽ cần PIN quản trị.</p>
+    <label class="f" for="imp-file">File Excel (.xlsx, .xls, .csv)</label>
+    <input type="file" id="imp-file" accept=".xlsx,.xls,.csv">
+    <div id="imp-preview" style="margin-top:10px"></div>
+    <label class="f">Chế độ nhập</label>
+    <div class="radio-row">
+      <label><input type="radio" name="imp-mode" value="append" checked> Chỉ thêm mã mới (bỏ qua mã đã có)</label>
+      <label><input type="radio" name="imp-mode" value="upsert"> Thêm mới + cập nhật mã đã có</label>
+      <label><input type="radio" name="imp-mode" value="replace"> Thay thế toàn bộ dữ liệu</label>
+    </div>
+    <p id="imp-replace-row" style="display:none" class="small">
+      <label><input type="checkbox" id="imp-confirm-replace"> Tôi hiểu chế độ này sẽ XOÁ toàn bộ dữ liệu tài sản hiện tại trong Sheet và thay bằng dữ liệu trong file.</label>
+    </p>
+    <div class="btn-row">
+      <button id="btn-import" class="btn" type="button" disabled>Nhập dữ liệu vào Google Sheet</button>
+    </div>
+    <p id="imp-msg" class="msg"></p>
+    <p class="small muted">Cột "Mã tài sản" là khoá chính: không được trống và không trùng. Ở chế độ cập nhật, ô nào trong file để trống thì giữ nguyên giá trị cũ trong Sheet.</p>
+  </div>
 </main>
 <footer class="site">Web tra cứu tài sản — dữ liệu lưu trên Google Sheet, quét QR trên tem để tra cứu nhanh.</footer>
 
 <script src="config.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/common.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function () {
   var state = { page: 1, totalPages: 1 };
   var $ = function (id) { return document.getElementById(id); };
+
+  function buildFacets(meta) {
+    [['bophan', meta.facets.bophan], ['tinhtrang', meta.facets.tinhtrang]].forEach(function (pair) {
+      var sel = $(pair[0]);
+      var current = sel.value;
+      sel.innerHTML = '<option value="">— Tất cả —</option>';
+      (pair[1] || []).forEach(function (v) {
+        var o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
+      });
+      sel.value = current;
+    });
+  }
 
   function params() {
     return {
@@ -74,7 +109,7 @@
       box.innerHTML = '<div class="card muted">Không tìm thấy tài sản nào phù hợp.</div>';
       return;
     }
-    box.innerHTML = items.map(function (it) {
+    var cardsHtml = items.map(function (it) {
       var meta = [];
       meta.push('<span class="ma">' + TS.esc(it.ma) + '</span>');
       if (it.sothe) meta.push('Số thẻ: ' + TS.esc(it.sothe));
@@ -86,6 +121,21 @@
         '<div class="ten">' + TS.esc(it.ten || '(Chưa có tên)') + '</div>' +
         '<div class="meta">' + meta.join('') + '</div></a>';
     }).join('');
+    var rowsHtml = items.map(function (it) {
+      return '<tr data-href="' + TS.detailUrl(it.ma) + '">' +
+        '<td class="ten">' + TS.esc(it.ten || '(Chưa có tên)') + '</td>' +
+        '<td class="ma">' + TS.esc(it.ma) + '</td>' +
+        '<td>' + TS.esc(it.sothe || '') + '</td>' +
+        '<td>' + TS.esc(it.bophan || '') + '</td>' +
+        '<td>' + TS.esc(it.nam || '') + '</td>' +
+        '<td>' + TS.statusBadge(it.tinhtrang) + '</td>' +
+        '<td>' + (it.dain === 'Đã in' ? 'Đã in' : 'Chưa in') + '</td></tr>';
+    }).join('');
+    box.innerHTML = '<div class="results-cards">' + cardsHtml + '</div>' +
+      '<table class="results-table"><thead><tr><th>Tên tài sản</th><th>Mã tài sản</th><th>Số thẻ</th><th>Bộ phận</th><th>Đưa vào SD</th><th>Tình trạng</th><th>Tem</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+    box.querySelectorAll('tr[data-href]').forEach(function (tr) {
+      tr.addEventListener('click', function () { location.href = tr.getAttribute('data-href'); });
+    });
   }
 
   async function doSearch() {
@@ -114,14 +164,7 @@
     // Điền bộ lọc từ meta
     try {
       var meta = await TS.loadMeta();
-      if (meta && meta.ok) {
-        (meta.facets.bophan || []).forEach(function (b) {
-          var o = document.createElement('option'); o.value = b; o.textContent = b; $('bophan').appendChild(o);
-        });
-        (meta.facets.tinhtrang || []).forEach(function (t) {
-          var o = document.createElement('option'); o.value = t; o.textContent = t; $('tinhtrang').appendChild(o);
-        });
-      }
+      if (meta && meta.ok) buildFacets(meta);
     } catch (e) { /* renderShell đã báo lỗi */ }
     // Nhận từ khoá từ URL (ví dụ từ trang chi tiết quay lại)
     var sp = new URLSearchParams(location.search);
@@ -132,6 +175,136 @@
   $('search-form').addEventListener('submit', function (ev) { ev.preventDefault(); state.page = 1; doSearch(); });
   $('prev').addEventListener('click', function () { if (state.page > 1) { state.page--; doSearch(); } });
   $('next').addEventListener('click', function () { if (state.page < state.totalPages) { state.page++; doSearch(); } });
+
+  /* ---------- Nhập dữ liệu từ Excel ---------- */
+  var impRows = null;
+  var IMP_KEYS = {
+    'stt': 'stt', 'so thu tu': 'stt', 'ma tai san': 'ma', 'so the tscd': 'sothe', 'so the': 'sothe',
+    'ten tscd': 'ten', 'ten tai san': 'ten', 'nguyen gia': 'nguyengia',
+    'nam dua vao su dung': 'nam', 'thoi gian dua vao su dung': 'nam',
+    'ngay kiem ke': 'ngaykk', 'bo phan su dung': 'bophan', 'tinh trang': 'tinhtrang',
+    'nguoi kiem ke': 'nguoikk', 'da in tem': 'dain', 'ngay in tem': 'ngayin', 'ghi chu': 'ghichu'
+  };
+  function foldVi(s) {
+    if (s == null) return '';
+    return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'D').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+  function fmtCell(v) {
+    if (v == null || v === '') return '';
+    if (v instanceof Date) {
+      var p2 = function (n) { return String(n).padStart(2, '0'); };
+      return p2(v.getDate()) + '/' + p2(v.getMonth() + 1) + '/' + v.getFullYear();
+    }
+    return String(v).trim();
+  }
+  function setImpMsg(text, ok) {
+    var el = $('imp-msg'); el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  $('imp-file').addEventListener('change', async function () {
+    var file = $('imp-file').files[0];
+    impRows = null;
+    $('btn-import').disabled = true;
+    $('imp-preview').innerHTML = '';
+    if (!file) return;
+    if (typeof XLSX === 'undefined') { setImpMsg('Không tải được thư viện đọc Excel — kiểm tra mạng rồi tải lại trang.', false); return; }
+    setImpMsg('Đang đọc file...', true);
+    try {
+      var buf = await file.arrayBuffer();
+      var wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      var sheetName = wb.SheetNames.indexOf('DATA') !== -1 ? 'DATA' : wb.SheetNames[0];
+      var aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true, defval: '' });
+      var anchor = -1;
+      for (var r0 = 0; r0 < Math.min(12, aoa.length); r0++) {
+        if ((aoa[r0] || []).some(function (cell) { return foldVi(cell) === 'ma tai san'; })) { anchor = r0; break; }
+      }
+      if (anchor === -1) { setImpMsg('Không tìm thấy cột "Mã tài sản" trong 12 dòng đầu của sheet "' + sheetName + '". File cần có dòng tiêu đề giống file kiểm kê hoặc sheet DATA mẫu.', false); return; }
+      var colMap = {}, lastHeaderRow = anchor;
+      for (var r = anchor; r < Math.min(anchor + 4, aoa.length); r++) {
+        var hline = aoa[r] || [];
+        if (hline.every(function (x) { return x === '' || x == null; })) continue;
+        var added = 0;
+        hline.forEach(function (cell, ci) {
+          var key = IMP_KEYS[foldVi(cell)];
+          if (key && colMap[key] === undefined) { colMap[key] = ci; added++; }
+        });
+        if (r > anchor && added === 0) break;
+        lastHeaderRow = r;
+      }
+      var rows = [], seen = {}, dup = 0, noMa = 0;
+      for (var i = lastHeaderRow + 1; i < aoa.length; i++) {
+        var line = aoa[i] || [];
+        var obj = {};
+        Object.keys(colMap).forEach(function (f) {
+          var v = line[colMap[f]];
+          obj[f] = (f === 'nguyengia' || f === 'stt') && typeof v === 'number' ? v : fmtCell(v);
+        });
+        if (!obj.ma) {
+          var allEmpty = Object.keys(obj).every(function (k) { return obj[k] === '' || obj[k] == null; });
+          if (!allEmpty) noMa++;
+          continue;
+        }
+        if (seen[obj.ma]) { dup++; continue; }
+        seen[obj.ma] = true;
+        rows.push(obj);
+      }
+      impRows = rows;
+      setImpMsg('Đã đọc sheet "' + sheetName + '": ' + rows.length + ' tài sản hợp lệ' +
+        (noMa ? ', bỏ qua ' + noMa + ' dòng thiếu mã' : '') +
+        (dup ? ', bỏ qua ' + dup + ' dòng trùng mã trong file (lấy dòng đầu tiên)' : '') + '.', true);
+      var prev = rows.slice(0, 8).map(function (o) {
+        return '<tr><td>' + TS.esc(o.ma) + '</td><td>' + TS.esc((o.ten || '').slice(0, 60)) + '</td><td>' + TS.esc(o.bophan || '') + '</td><td>' + TS.esc(o.tinhtrang || '') + '</td></tr>';
+      }).join('');
+      $('imp-preview').innerHTML = '<div style="overflow-x:auto"><table class="kv"><tr><th>Mã</th><th>Tên</th><th>Bộ phận</th><th>Tình trạng</th></tr>' + prev + '</table></div>' +
+        (rows.length > 8 ? '<p class="small muted">Xem trước 8/' + rows.length + ' dòng đầu tiên.</p>' : '');
+      $('btn-import').disabled = false;
+    } catch (e) {
+      setImpMsg('Không đọc được file: ' + e.message, false);
+    }
+  });
+
+  document.querySelectorAll('input[name="imp-mode"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      $('imp-replace-row').style.display = document.querySelector('input[name="imp-mode"]:checked').value === 'replace' ? 'block' : 'none';
+    });
+  });
+
+  $('btn-import').addEventListener('click', async function () {
+    if (!impRows || !impRows.length) { setImpMsg('Chưa có dữ liệu để nhập — hãy chọn file Excel trước.', false); return; }
+    var mode = document.querySelector('input[name="imp-mode"]:checked').value;
+    if (mode === 'replace' && !$('imp-confirm-replace').checked) {
+      setImpMsg('Chế độ thay thế toàn bộ cần tick ô xác nhận bên trên.', false); return;
+    }
+    var pin = '';
+    try { pin = sessionStorage.getItem('ts_pin') || ''; } catch (e) {}
+    if (!pin) { pin = window.prompt('Nhập PIN quản trị (đặt trong sheet CAU_HINH):') || ''; if (!pin) return; }
+    var BATCH = 200, totalIns = 0, totalUpd = 0, totalSkip = 0;
+    $('btn-import').disabled = true;
+    try {
+      for (var i = 0; i < impRows.length; i += BATCH) {
+        var chunk = impRows.slice(i, i + BATCH);
+        var m = (mode === 'replace' && i > 0) ? 'append' : mode;
+        setImpMsg('Đang nhập ' + Math.min(i + BATCH, impRows.length) + '/' + impRows.length + ' dòng...', true);
+        var res = await TSApi.apiPost('importData', { pin: pin, mode: m, rows: chunk });
+        if (!res.ok) {
+          if (res.error === 'WRONG_PIN') { try { sessionStorage.removeItem('ts_pin'); } catch (e) {} }
+          throw new Error(res.message || res.error);
+        }
+        totalIns += res.inserted || 0; totalUpd += res.updated || 0; totalSkip += res.skipped || 0;
+      }
+      try { sessionStorage.setItem('ts_pin', pin); sessionStorage.removeItem('ts_meta'); } catch (e) {}
+      setImpMsg('Nhập xong: thêm mới ' + totalIns + ', cập nhật ' + totalUpd + ', bỏ qua ' + totalSkip + '. Danh sách tra cứu bên trên đã được làm mới.', true);
+      try {
+        var meta2 = await TS.loadMeta(true);
+        if (meta2 && meta2.ok) buildFacets(meta2);
+      } catch (e) {}
+      state.page = 1; doSearch();
+    } catch (e) {
+      setImpMsg('Lỗi khi nhập: ' + e.message, false);
+    } finally {
+      $('btn-import').disabled = false;
+    }
+  });
 })();
 </script>
 </body>

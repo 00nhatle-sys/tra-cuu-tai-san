@@ -19,8 +19,10 @@
 </nav>
 <main>
   <div id="api-warning">Chưa cấu hình địa chỉ dữ liệu (Apps Script). Vào trang <a href="settings.html">Cài đặt</a> để nhập URL Web App.</div>
-  <div id="detail"><p class="muted">Đang tải thông tin tài sản...</p></div>
-  <div id="kk-box"></div>
+  <div class="asset-wrap">
+    <div id="detail"><p class="muted">Đang tải thông tin tài sản...</p></div>
+    <div id="kk-box"></div>
+  </div>
 </main>
 <footer class="site">Web tra cứu tài sản — dữ liệu lưu trên Google Sheet.</footer>
 
@@ -59,7 +61,7 @@
           '<button id="btn-confirm-kk" class="btn" type="button">' + (doneToday ? 'Xác nhận kiểm kê lại' : 'Xác nhận kiểm kê') + '</button>' +
         '</div>' +
         '<p id="kk-msg" class="msg">' + (note ? TS.esc(note) : '') + '</p>' +
-        '<p class="small muted">Xác nhận sẽ ghi Ngày kiểm kê là ngày hôm nay vào Google Sheet. Thao tác ghi cần PIN quản trị (web chỉ hỏi 1 lần cho mỗi phiên làm việc).</p>' +
+        '<p class="small muted kk-note">Xác nhận sẽ ghi Ngày kiểm kê là ngày hôm nay vào Google Sheet. Thao tác ghi cần PIN quản trị (web chỉ hỏi 1 lần cho mỗi phiên làm việc).</p>' +
       '</div>';
     document.getElementById('btn-confirm-kk').addEventListener('click', confirmKk);
   }
@@ -129,7 +131,7 @@
             row('Người kiểm kê', it.nguoikk) +
             row('Trạng thái tem', tem) +
           '</table>' +
-          '<div class="btn-row">' +
+          '<div class="btn-row detail-actions">' +
             '<a class="btn" href="labels.html?add=' + encodeURIComponent(it.ma) + '">In tem tài sản này ra A4</a>' +
             '<a class="btn secondary" href="scan.html">Quét mã khác</a>' +
             '<a class="btn secondary" href="index.html">Về tra cứu</a>' +

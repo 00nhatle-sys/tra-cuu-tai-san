@@ -22,6 +22,7 @@
 
   <div class="no-print">
     <h1 class="page">Tạo tem dán tài sản</h1>
+    <div class="labels-grid">
 
     <div class="card">
       <b>1. Tìm và chọn tài sản cần in tem</b>
@@ -64,11 +65,12 @@
         <label><input type="radio" name="layout" value="vua"> Vừa 63×40mm — 21 tem/A4 (tiêu đề liền dữ liệu)</label>
       </div>
       <div class="btn-row">
-        <button id="btn-print" class="btn" type="button">In tem (chọn khổ A4, tỉ lệ 100%)</button>
+        <button id="btn-print" class="btn" type="button">In tem ra giấy A4</button>
         <button id="btn-mark" class="btn secondary" type="button">Đánh dấu đã in</button>
       </div>
       <p id="print-msg" class="msg"></p>
       <p class="small muted">Sau khi in xong, bấm "Đánh dấu đã in" để cập nhật trạng thái tem vào Google Sheet (cần PIN quản trị). Khi in, chọn khổ giấy A4 và tỉ lệ 100% / Actual size, không chọn "Vừa trang".</p>
+    </div>
     </div>
   </div>
 
@@ -246,6 +248,13 @@
       } catch (e) { /* bỏ qua */ }
     }
     renderSelection();
+    // Đến từ trang chi tiết (?add=...): báo rõ và cuộn tới nút in
+    if (add && selection.has(add)) {
+      var pm = $('print-msg');
+      pm.textContent = 'Đã thêm tài sản ' + add + ' vào danh sách in bên dưới. Bấm nút "In tem ra giấy A4" để in.';
+      pm.className = 'msg ok';
+      $('btn-print').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   });
 
   $('pick-form').addEventListener('submit', function (ev) { ev.preventDefault(); doPickSearch(); });
