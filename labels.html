@@ -79,7 +79,7 @@
 <script src="config.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/common.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+<script src="assets/js/qrcode.min.js"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -118,7 +118,7 @@
       '<div class="lb-unit">' + TS.esc(unitName || 'TEM TÀI SẢN') + '</div>' +
       '<div class="lb-name-row"><span class="lb-t">Tên tài sản:</span><span class="lb-v name">' + TS.esc(it.ten || '') + '</span></div>' +
       '<div class="lb-body"><div class="lb-fields">' + rows + '</div>' +
-      '<div class="lb-qr"><canvas data-qr="' + TS.esc(it.ma) + '"></canvas></div></div></div>';
+      '<div class="lb-qr"><div class="qr-slot" data-qr="' + TS.esc(it.ma) + '"></div></div></div></div>';
   }
   function labelVua(it) {
     var lines = [
@@ -133,7 +133,7 @@
     return '<div class="lb vua">' +
       '<div class="lb-unit">' + TS.esc(unitName || 'TEM TÀI SẢN') + '</div>' +
       '<div class="lb-body"><div class="lb-lines">' + lines + '</div>' +
-      '<div class="lb-qr"><canvas data-qr="' + TS.esc(it.ma) + '"></canvas></div></div></div>';
+      '<div class="lb-qr"><div class="qr-slot" data-qr="' + TS.esc(it.ma) + '"></div></div></div></div>';
   }
 
   function renderSheets() {
@@ -160,15 +160,17 @@
       sheet.innerHTML = items.slice(i, i + per).map(lay === 'lon' ? labelLon : labelVua).join('');
       area.appendChild(sheet);
     }
-    // Vẽ QR
-    area.querySelectorAll('canvas[data-qr]').forEach(function (cv) {
-      var url = TS.absoluteDetailUrl(cv.getAttribute('data-qr'));
+    // Vẽ QR (thư viện qrcodejs đóng gói sẵn trong assets/js, không phụ thuộc CDN)
+    area.querySelectorAll('.qr-slot').forEach(function (slot) {
+      var url = TS.absoluteDetailUrl(slot.getAttribute('data-qr'));
       if (typeof QRCode !== 'undefined') {
-        QRCode.toCanvas(cv, url, { width: 340, margin: 0, errorCorrectionLevel: 'M' }, function (err) {
-          if (err) cv.outerHTML = '<span class="small">' + TS.esc(url) + '</span>';
-        });
+        try {
+          new QRCode(slot, { text: url, width: 340, height: 340, correctLevel: QRCode.CorrectLevel.M });
+        } catch (err) {
+          slot.innerHTML = '<span class="small">' + TS.esc(url) + '</span>';
+        }
       } else {
-        cv.outerHTML = '<span class="small">Không tải được thư viện QR — kiểm tra mạng.<br>' + TS.esc(url) + '</span>';
+        slot.innerHTML = '<span class="small">Không tải được thư viện QR.<br>' + TS.esc(url) + '</span>';
       }
     });
   }
