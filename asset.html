@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chi tiết tài sản</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="search">
+<header class="site">
+  <div class="unit" data-unit>TRA CỨU TÀI SẢN CỐ ĐỊNH</div>
+  <div class="subline" data-subline>Quét mã QR trên tem để xem thông tin tài sản</div>
+</header>
+<nav class="main-nav">
+  <a href="index.html" data-nav="search">Tra cứu</a>
+  <a href="scan.html" data-nav="scan">Quét QR</a>
+  <a href="labels.html" data-nav="labels">Tạo tem</a>
+  <a href="settings.html" data-nav="settings">Cài đặt</a>
+</nav>
+<main>
+  <div id="api-warning">Chưa cấu hình địa chỉ dữ liệu (Apps Script). Vào trang <a href="settings.html">Cài đặt</a> để nhập URL Web App.</div>
+  <div id="detail"><p class="muted">Đang tải thông tin tài sản...</p></div>
+</main>
+<footer class="site">Web tra cứu tài sản — dữ liệu lưu trên Google Sheet.</footer>
+
+<script src="config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/common.js"></script>
+<script>
+(function () {
+  function row(label, value) {
+    if (value === undefined || value === null || value === '') return '';
+    return '<tr><th>' + TS.esc(label) + '</th><td>' + TS.esc(value) + '</td></tr>';
+  }
+
+  document.addEventListener('DOMContentLoaded', async function () {
+    var box = document.getElementById('detail');
+    var id = new URLSearchParams(location.search).get('id');
+    if (!id) {
+      box.innerHTML = '<div class="card"><h1 class="page">Thiếu mã tài sản</h1>' +
+        '<p>Đường link chưa có mã tài sản. Hãy quét lại mã QR trên tem hoặc <a href="index.html">về trang tra cứu</a>.</p></div>';
+      return;
+    }
+    try {
+      var res = await TSApi.apiGet('getAsset', { id: id });
+      if (!res.ok) {
+        if (res.error === 'NOT_FOUND') {
+          box.innerHTML = '<div class="card"><h1 class="page">Không tìm thấy tài sản</h1>' +
+            '<p>Mã tài sản <b>' + TS.esc(id) + '</b> không có trong dữ liệu. Kiểm tra lại tem hoặc ' +
+            '<a href="index.html?q=' + encodeURIComponent(id) + '">tìm kiếm theo từ khoá này</a>.</p></div>';
+        } else {
+          throw new Error(res.message || res.error || 'Lỗi không rõ');
+        }
+        return;
+      }
+      var it = res.item;
+      document.title = it.ten || it.ma;
+      var sdLabel = (it.nam && String(it.nam).length === 4) ? 'Năm đưa vào sử dụng' : 'Ngày đưa vào sử dụng';
+      var tem = it.dain === 'Đã in' ? 'Đã in tem' + (it.ngayin ? ' (ngày ' + it.ngayin + ')' : '') : 'Chưa in tem';
+      box.innerHTML =
+        '<div class="card">' +
+          '<div class="detail-ten">' + TS.esc(it.ten || '(Chưa có tên)') + '</div>' +
+          '<p>' + TS.statusBadge(it.tinhtrang) + '</p>' +
+          '<table class="kv">' +
+            row('Mã tài sản', it.ma) +
+            row('Số thẻ TSCĐ', it.sothe) +
+            row(sdLabel, it.nam) +
+            row('Ngày kiểm kê', it.ngaykk) +
+            row('Bộ phận sử dụng', it.bophan) +
+            row('Tình trạng', it.tinhtrang) +
+            row('Người kiểm kê', it.nguoikk) +
+            row('Trạng thái tem', tem) +
+          '</table>' +
+          '<div class="btn-row">' +
+            '<a class="btn" href="labels.html?add=' + encodeURIComponent(it.ma) + '">Tạo tem cho tài sản này</a>' +
+            '<a class="btn secondary" href="scan.html">Quét mã khác</a>' +
+            '<a class="btn secondary" href="index.html">Về tra cứu</a>' +
+          '</div>' +
+        '</div>';
+    } catch (e) {
+      box.innerHTML = '<div class="card"><h1 class="page">Không tải được thông tin</h1><p class="msg err">' + TS.esc(e.message) + '</p></div>';
+    }
+  });
+})();
+</script>
+</body>
+</html>

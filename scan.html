@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quét mã QR tài sản</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="scan">
+<header class="site">
+  <div class="unit" data-unit>TRA CỨU TÀI SẢN CỐ ĐỊNH</div>
+  <div class="subline" data-subline>Quét mã QR trên tem để xem thông tin tài sản</div>
+</header>
+<nav class="main-nav">
+  <a href="index.html" data-nav="search">Tra cứu</a>
+  <a href="scan.html" data-nav="scan">Quét QR</a>
+  <a href="labels.html" data-nav="labels">Tạo tem</a>
+  <a href="settings.html" data-nav="settings">Cài đặt</a>
+</nav>
+<main>
+  <h1 class="page">Quét mã QR trên tem tài sản</h1>
+  <div class="card">
+    <div id="reader"></div>
+    <div class="btn-row" style="justify-content:center">
+      <button id="btn-start" class="btn" type="button">Bật camera quét</button>
+      <button id="btn-stop" class="btn secondary" type="button" style="display:none">Tắt camera</button>
+    </div>
+    <p id="scan-msg" class="msg" style="text-align:center"></p>
+    <p class="small muted" style="text-align:center">Mẹo: anh cũng có thể dùng camera thường hoặc Zalo quét QR trên tem — mã sẽ mở thẳng trang chi tiết của tài sản đó.</p>
+  </div>
+  <div class="card">
+    <b>Hoặc nhập mã tài sản thủ công</b>
+    <form id="manual-form" class="btn-row" style="align-items:flex-end">
+      <div style="flex:1; min-width:200px">
+        <label class="f" for="manual-id">Mã tài sản</label>
+        <input type="text" id="manual-id" placeholder="Ví dụ: BHO-0000490" autocomplete="off">
+      </div>
+      <button type="submit" class="btn">Xem tài sản</button>
+    </form>
+  </div>
+</main>
+<footer class="site">Trang quét cần chạy trên HTTPS (GitHub Pages đã có sẵn) và được cấp quyền camera.</footer>
+
+<script src="config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+(function () {
+  var scanner = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function extractId(text) {
+    text = String(text || '').trim();
+    try {
+      var u = new URL(text);
+      var id = u.searchParams.get('id');
+      if (id) return id;
+    } catch (e) { /* không phải URL */ }
+    // QR chứa thẳng mã tài sản
+    if (/^[A-Za-z0-9][A-Za-z0-9\-_]{2,40}$/.test(text)) return text;
+    return null;
+  }
+
+  function go(id) {
+    location.href = 'asset.html?id=' + encodeURIComponent(id);
+  }
+
+  async function stopScanner() {
+    if (scanner) {
+      try { await scanner.stop(); } catch (e) { /* bỏ qua */ }
+      scanner = null;
+    }
+    $('btn-start').style.display = '';
+    $('btn-stop').style.display = 'none';
+  }
+
+  $('btn-start').addEventListener('click', async function () {
+    var msg = $('scan-msg'); msg.className = 'msg'; msg.textContent = '';
+    if (typeof Html5Qrcode === 'undefined') {
+      msg.textContent = 'Không tải được thư viện quét QR — kiểm tra kết nối mạng rồi thử lại.'; msg.classList.add('err'); return;
+    }
+    scanner = new Html5Qrcode('reader');
+    try {
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        async function (decoded) {
+          var id = extractId(decoded);
+          if (id) { await stopScanner(); go(id); }
+        },
+        function () { /* bỏ qua lỗi từng khung hình */ }
+      );
+      $('btn-start').style.display = 'none';
+      $('btn-stop').style.display = '';
+      msg.textContent = 'Đang quét... đưa mã QR trên tem vào khung hình.';
+    } catch (e) {
+      msg.textContent = 'Không mở được camera. Kiểm tra quyền camera của trình duyệt, hoặc dùng camera thường/Zalo để quét.';
+      msg.classList.add('err');
+      scanner = null;
+    }
+  });
+  $('btn-stop').addEventListener('click', stopScanner);
+  $('manual-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var id = $('manual-id').value.trim();
+    if (id) go(id);
+  });
+})();
+</script>
+</body>
+</html>

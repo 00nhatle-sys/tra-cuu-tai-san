@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cài đặt — Tra cứu tài sản</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="settings">
+<header class="site">
+  <div class="unit" data-unit>TRA CỨU TÀI SẢN CỐ ĐỊNH</div>
+  <div class="subline" data-subline>Quét mã QR trên tem để xem thông tin tài sản</div>
+</header>
+<nav class="main-nav">
+  <a href="index.html" data-nav="search">Tra cứu</a>
+  <a href="scan.html" data-nav="scan">Quét QR</a>
+  <a href="labels.html" data-nav="labels">Tạo tem</a>
+  <a href="settings.html" data-nav="settings">Cài đặt</a>
+</nav>
+<main>
+  <h1 class="page">Cài đặt</h1>
+
+  <div class="card">
+    <b>1. Kết nối dữ liệu (Apps Script)</b>
+    <label class="f" for="api-url">URL Web App Apps Script (đuôi /exec)</label>
+    <input type="text" id="api-url" placeholder="https://script.google.com/macros/s/AKfyc.../exec" autocomplete="off">
+    <div class="btn-row">
+      <button id="btn-save-url" class="btn" type="button">Lưu URL</button>
+      <button id="btn-test" class="btn secondary" type="button">Kiểm tra kết nối</button>
+    </div>
+    <p id="url-msg" class="msg"></p>
+    <p class="small muted">URL này cũng có thể đặt sẵn trong file <b>config.js</b> khi đưa web lên GitHub Pages để mọi máy đều dùng chung. Giá trị nhập ở đây được lưu tại trình duyệt này và được ưu tiên hơn config.js.</p>
+  </div>
+
+  <div class="card">
+    <b>2. Thông tin đơn vị &amp; hiển thị công khai</b>
+    <label class="f" for="cfg-unit">Tên đơn vị (in trên đầu tem và header web)</label>
+    <input type="text" id="cfg-unit" placeholder="Ví dụ: CÔNG TY ..." autocomplete="off">
+    <label class="f" for="cfg-sub">Dòng phụ dưới tên đơn vị</label>
+    <input type="text" id="cfg-sub" placeholder="Ví dụ: TEM TÀI SẢN CỐ ĐỊNH" autocomplete="off">
+    <label class="f" for="cfg-sothe">Hiện Số thẻ TSCĐ khi quét QR</label>
+    <select id="cfg-sothe"><option>Có</option><option>Không</option></select>
+    <label class="f" for="cfg-nam">Hiện Năm/Ngày đưa vào sử dụng khi quét QR</label>
+    <select id="cfg-nam"><option>Có</option><option>Không</option></select>
+    <label class="f" for="cfg-nguoikk">Hiện Người kiểm kê khi quét QR</label>
+    <select id="cfg-nguoikk"><option>Không</option><option>Có</option></select>
+    <label class="f" for="cfg-layout">Mẫu tem mặc định</label>
+    <select id="cfg-layout">
+      <option>Hai cột TT (2x5)</option>
+      <option>Vừa (3x7)</option>
+    </select>
+    <label class="f" for="cfg-pin">PIN quản trị (đã đặt trong sheet CAU_HINH)</label>
+    <input type="password" id="cfg-pin" placeholder="Nhập PIN để lưu cấu hình" autocomplete="off">
+    <div class="btn-row">
+      <button id="btn-save-cfg" class="btn" type="button">Lưu cấu hình vào Google Sheet</button>
+    </div>
+    <p id="cfg-msg" class="msg"></p>
+    <p class="small muted">Nguyên giá luôn luôn bị ẩn khi quét QR — không có tuỳ chọn bật. PIN quản trị đặt trực tiếp trong sheet CAU_HINH của Google Sheet (tham số PINQuanTri); trang này chỉ dùng PIN để xác thực khi lưu.</p>
+  </div>
+</main>
+<footer class="site">Thay đổi cấu hình áp dụng cho mọi máy ngay sau khi lưu (web đọc lại cấu hình từ Google Sheet).</footer>
+
+<script src="config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/common.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  function setMsg(id, text, ok) {
+    var el = $(id); el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  document.addEventListener('DOMContentLoaded', async function () {
+    $('api-url').value = TSApi.apiUrl() || '';
+    if (TSApi.hasApi()) {
+      try {
+        var meta = await TS.loadMeta(true);
+        if (meta && meta.ok) {
+          var c = meta.config || {};
+          $('cfg-unit').value = c.TenDonVi || '';
+          $('cfg-sub').value = c.DongDauTem || '';
+          $('cfg-sothe').value = c.HienSoThe || 'Có';
+          $('cfg-nam').value = c.HienNamSuDung || 'Có';
+          $('cfg-nguoikk').value = c.HienNguoiKiemKe || 'Không';
+          $('cfg-layout').value = c.MauTemMacDinh || 'Hai cột TT (2x5)';
+        }
+      } catch (e) { setMsg('cfg-msg', 'Chưa tải được cấu hình hiện tại: ' + e.message, false); }
+    }
+  });
+
+  $('btn-save-url').addEventListener('click', function () {
+    var u = $('api-url').value.trim();
+    if (u && u.indexOf('script.google.com') === -1) {
+      setMsg('url-msg', 'URL có vẻ không phải của Apps Script (phải chứa script.google.com và đuôi /exec).', false); return;
+    }
+    TSApi.setApiUrl(u);
+    try { sessionStorage.removeItem('ts_meta'); } catch (e) {}
+    setMsg('url-msg', u ? 'Đã lưu URL. Bấm "Kiểm tra kết nối" để xác nhận.' : 'Đã xoá URL đã lưu tại máy này.', true);
+  });
+
+  $('btn-test').addEventListener('click', async function () {
+    setMsg('url-msg', 'Đang kiểm tra...', true);
+    try {
+      TSApi.setApiUrl($('api-url').value.trim());
+      var res = await TSApi.apiGet('ping');
+      if (res.ok) setMsg('url-msg', 'Kết nối tốt. Máy chủ dữ liệu phản hồi lúc ' + (res.time || '') + '.', true);
+      else setMsg('url-msg', 'Máy chủ trả về lỗi: ' + (res.message || res.error), false);
+    } catch (e) { setMsg('url-msg', e.message, false); }
+  });
+
+  $('btn-save-cfg').addEventListener('click', async function () {
+    var pin = $('cfg-pin').value.trim();
+    if (!pin) { setMsg('cfg-msg', 'Nhập PIN quản trị để lưu.', false); return; }
+    setMsg('cfg-msg', 'Đang lưu...', true);
+    try {
+      var res = await TSApi.apiPost('saveConfig', {
+        pin: pin,
+        config: {
+          TenDonVi: $('cfg-unit').value.trim(),
+          DongDauTem: $('cfg-sub').value.trim(),
+          HienSoThe: $('cfg-sothe').value,
+          HienNamSuDung: $('cfg-nam').value,
+          HienNguoiKiemKe: $('cfg-nguoikk').value,
+          MauTemMacDinh: $('cfg-layout').value
+        }
+      });
+      if (!res.ok) throw new Error(res.message || res.error);
+      try { sessionStorage.setItem('ts_pin', pin); sessionStorage.removeItem('ts_meta'); } catch (e) {}
+      setMsg('cfg-msg', 'Đã lưu cấu hình vào Google Sheet. Tải lại trang để thấy tên đơn vị mới.', true);
+    } catch (e) { setMsg('cfg-msg', e.message, false); }
+  });
+})();
+</script>
+</body>
+</html>

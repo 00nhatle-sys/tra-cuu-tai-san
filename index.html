@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tra cứu tài sản cố định</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="search">
+<header class="site">
+  <div class="unit" data-unit>TRA CỨU TÀI SẢN CỐ ĐỊNH</div>
+  <div class="subline" data-subline>Quét mã QR trên tem để xem thông tin tài sản</div>
+</header>
+<nav class="main-nav">
+  <a href="index.html" data-nav="search">Tra cứu</a>
+  <a href="scan.html" data-nav="scan">Quét QR</a>
+  <a href="labels.html" data-nav="labels">Tạo tem</a>
+  <a href="settings.html" data-nav="settings">Cài đặt</a>
+</nav>
+<main>
+  <div id="api-warning">Chưa cấu hình địa chỉ dữ liệu (Apps Script). Vào trang <a href="settings.html">Cài đặt</a> để nhập URL Web App.</div>
+
+  <h1 class="page">Tra cứu tài sản</h1>
+  <div class="card">
+    <form id="search-form" class="search-grid">
+      <div>
+        <label class="f" for="q">Từ khoá (tên, mã tài sản, số thẻ — gõ không dấu cũng được)</label>
+        <input type="search" id="q" placeholder="Ví dụ: may do ohm, BHO-0000490..." autocomplete="off">
+      </div>
+      <div>
+        <label class="f" for="bophan">Bộ phận sử dụng</label>
+        <select id="bophan"><option value="">— Tất cả —</option></select>
+      </div>
+      <div>
+        <label class="f" for="tinhtrang">Tình trạng</label>
+        <select id="tinhtrang"><option value="">— Tất cả —</option></select>
+      </div>
+      <button type="submit" class="btn">Tìm kiếm</button>
+    </form>
+  </div>
+
+  <p id="result-info" class="muted"></p>
+  <div id="results"></div>
+  <div id="pager" class="pager" style="display:none">
+    <button id="prev" class="btn secondary small">← Trang trước</button>
+    <span id="page-info"></span>
+    <button id="next" class="btn secondary small">Trang sau →</button>
+  </div>
+  <p id="search-msg" class="msg"></p>
+</main>
+<footer class="site">Web tra cứu tài sản — dữ liệu lưu trên Google Sheet, quét QR trên tem để tra cứu nhanh.</footer>
+
+<script src="config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/common.js"></script>
+<script>
+(function () {
+  var state = { page: 1, totalPages: 1 };
+  var $ = function (id) { return document.getElementById(id); };
+
+  function params() {
+    return {
+      q: $('q').value.trim(),
+      bophan: $('bophan').value,
+      tinhtrang: $('tinhtrang').value,
+      page: state.page,
+      pageSize: 20
+    };
+  }
+
+  function renderItems(items) {
+    var box = $('results');
+    if (!items.length) {
+      box.innerHTML = '<div class="card muted">Không tìm thấy tài sản nào phù hợp.</div>';
+      return;
+    }
+    box.innerHTML = items.map(function (it) {
+      var meta = [];
+      meta.push('<span class="ma">' + TS.esc(it.ma) + '</span>');
+      if (it.sothe) meta.push('Số thẻ: ' + TS.esc(it.sothe));
+      if (it.bophan) meta.push(TS.esc(it.bophan));
+      if (it.nam) meta.push('SD: ' + TS.esc(it.nam));
+      meta.push(TS.statusBadge(it.tinhtrang));
+      if (it.dain === 'Đã in') meta.push('<span class="badge printed">Đã in tem</span>');
+      return '<a class="result-item" href="' + TS.detailUrl(it.ma) + '">' +
+        '<div class="ten">' + TS.esc(it.ten || '(Chưa có tên)') + '</div>' +
+        '<div class="meta">' + meta.join('') + '</div></a>';
+    }).join('');
+  }
+
+  async function doSearch() {
+    var msg = $('search-msg');
+    msg.textContent = ''; msg.className = 'msg';
+    $('result-info').textContent = 'Đang tìm...';
+    try {
+      var res = await TSApi.apiGet('search', params());
+      if (!res.ok) throw new Error(res.message || res.error || 'Lỗi không rõ');
+      state.totalPages = res.totalPages || 1;
+      $('result-info').textContent = 'Tìm thấy ' + res.total + ' tài sản' + (res.total ? ' — trang ' + res.page + '/' + state.totalPages : '');
+      renderItems(res.items || []);
+      $('pager').style.display = res.total > res.pageSize ? 'flex' : 'none';
+      $('page-info').textContent = 'Trang ' + res.page + ' / ' + state.totalPages;
+      $('prev').disabled = res.page <= 1;
+      $('next').disabled = res.page >= state.totalPages;
+    } catch (e) {
+      $('result-info').textContent = '';
+      $('results').innerHTML = '';
+      $('pager').style.display = 'none';
+      msg.textContent = e.message; msg.classList.add('err');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', async function () {
+    // Điền bộ lọc từ meta
+    try {
+      var meta = await TS.loadMeta();
+      if (meta && meta.ok) {
+        (meta.facets.bophan || []).forEach(function (b) {
+          var o = document.createElement('option'); o.value = b; o.textContent = b; $('bophan').appendChild(o);
+        });
+        (meta.facets.tinhtrang || []).forEach(function (t) {
+          var o = document.createElement('option'); o.value = t; o.textContent = t; $('tinhtrang').appendChild(o);
+        });
+      }
+    } catch (e) { /* renderShell đã báo lỗi */ }
+    // Nhận từ khoá từ URL (ví dụ từ trang chi tiết quay lại)
+    var sp = new URLSearchParams(location.search);
+    if (sp.get('q')) $('q').value = sp.get('q');
+    if (TSApi.hasApi()) doSearch();
+  });
+
+  $('search-form').addEventListener('submit', function (ev) { ev.preventDefault(); state.page = 1; doSearch(); });
+  $('prev').addEventListener('click', function () { if (state.page > 1) { state.page--; doSearch(); } });
+  $('next').addEventListener('click', function () { if (state.page < state.totalPages) { state.page++; doSearch(); } });
+})();
+</script>
+</body>
+</html>

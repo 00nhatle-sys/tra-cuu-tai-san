@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tạo tem tài sản</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="labels">
+<header class="site">
+  <div class="unit" data-unit>TRA CỨU TÀI SẢN CỐ ĐỊNH</div>
+  <div class="subline" data-subline>Quét mã QR trên tem để xem thông tin tài sản</div>
+</header>
+<nav class="main-nav">
+  <a href="index.html" data-nav="search">Tra cứu</a>
+  <a href="scan.html" data-nav="scan">Quét QR</a>
+  <a href="labels.html" data-nav="labels">Tạo tem</a>
+  <a href="settings.html" data-nav="settings">Cài đặt</a>
+</nav>
+<main>
+  <div id="api-warning">Chưa cấu hình địa chỉ dữ liệu (Apps Script). Vào trang <a href="settings.html">Cài đặt</a> để nhập URL Web App.</div>
+
+  <div class="no-print">
+    <h1 class="page">Tạo tem dán tài sản</h1>
+
+    <div class="card">
+      <b>1. Tìm và chọn tài sản cần in tem</b>
+      <form id="pick-form" class="search-grid" style="margin-top:8px">
+        <div>
+          <label class="f" for="q">Từ khoá</label>
+          <input type="search" id="q" placeholder="Tên, mã, số thẻ..." autocomplete="off">
+        </div>
+        <div>
+          <label class="f" for="bophan">Bộ phận</label>
+          <select id="bophan"><option value="">— Tất cả —</option></select>
+        </div>
+        <div>
+          <label class="f" for="dain">Trạng thái tem</label>
+          <select id="dain">
+            <option value="">— Tất cả —</option>
+            <option value="Chưa">Chưa in tem</option>
+            <option value="Đã in">Đã in tem</option>
+          </select>
+        </div>
+        <button type="submit" class="btn">Tìm</button>
+      </form>
+      <p id="pick-msg" class="msg"></p>
+      <div id="pick-list"></div>
+      <div class="btn-row">
+        <button id="pick-all" class="btn secondary small" type="button">Chọn tất cả kết quả</button>
+        <button id="pick-none" class="btn secondary small" type="button">Bỏ chọn kết quả này</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <b>2. Danh sách tem sẽ in (<span id="sel-count">0</span>)</b>
+      <div id="sel-chips" style="margin-top:10px"></div>
+      <div class="btn-row">
+        <button id="sel-clear" class="btn secondary small" type="button">Xoá toàn bộ danh sách</button>
+      </div>
+      <label class="f">Mẫu tem</label>
+      <div class="radio-row">
+        <label><input type="radio" name="layout" value="lon"> Lớn 95×55mm — 10 tem/A4 (2 cột tiêu đề/dữ liệu, tên gộp 100%)</label>
+        <label><input type="radio" name="layout" value="vua"> Vừa 63×40mm — 21 tem/A4 (tiêu đề liền dữ liệu)</label>
+      </div>
+      <div class="btn-row">
+        <button id="btn-print" class="btn" type="button">In tem (chọn khổ A4, tỉ lệ 100%)</button>
+        <button id="btn-mark" class="btn secondary" type="button">Đánh dấu đã in</button>
+      </div>
+      <p id="print-msg" class="msg"></p>
+      <p class="small muted">Sau khi in xong, bấm "Đánh dấu đã in" để cập nhật trạng thái tem vào Google Sheet (cần PIN quản trị). Khi in, chọn khổ giấy A4 và tỉ lệ 100% / Actual size, không chọn "Vừa trang".</p>
+    </div>
+  </div>
+
+  <div id="print-area"></div>
+</main>
+<footer class="site no-print">Kiểm tra kỹ tem in thử đầu tiên bằng thước: mẫu Lớn đúng 95×55mm, mẫu Vừa đúng 63×40mm.</footer>
+
+<script src="config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var PER_PAGE = { lon: 10, vua: 21 };
+  var selection = new Map(); // ma -> item
+  var lastResults = [];
+  var unitName = '';
+
+  function saveSel() {
+    try { localStorage.setItem('ts_sel_v1', JSON.stringify(Array.from(selection.values()))); } catch (e) {}
+  }
+  function loadSel() {
+    try {
+      var arr = JSON.parse(localStorage.getItem('ts_sel_v1') || '[]');
+      arr.forEach(function (it) { if (it && it.ma) selection.set(it.ma, it); });
+    } catch (e) {}
+  }
+  function layout() {
+    var r = document.querySelector('input[name="layout"]:checked');
+    return r ? r.value : 'lon';
+  }
+
+  /* ---------- label HTML ---------- */
+  function labelLon(it) {
+    var rows = [
+      ['Mã tài sản:', '<b>' + TS.esc(it.ma) + '</b>'],
+      ['Số thẻ:', TS.esc(it.sothe || '-')],
+      ['Ngày đưa vào SD:', TS.esc(it.nam || '-')],
+      ['Ngày kiểm kê:', TS.esc(it.ngaykk || '-')],
+      ['Tình trạng:', TS.esc(it.tinhtrang || '-')],
+      ['BP. Sử dụng:', TS.esc(it.bophan || '-')]
+    ].map(function (r) {
+      return '<div class="lb-row"><span class="lb-t">' + r[0] + '</span><span class="lb-v">' + r[1] + '</span></div>';
+    }).join('');
+    return '<div class="lb lon">' +
+      '<div class="lb-unit">' + TS.esc(unitName || 'TEM TÀI SẢN') + '</div>' +
+      '<div class="lb-name-row"><span class="lb-t">Tên tài sản:</span><span class="lb-v name">' + TS.esc(it.ten || '') + '</span></div>' +
+      '<div class="lb-body"><div class="lb-fields">' + rows + '</div>' +
+      '<div class="lb-qr"><canvas data-qr="' + TS.esc(it.ma) + '"></canvas></div></div></div>';
+  }
+  function labelVua(it) {
+    var lines = [
+      'Tên tài sản: <b>' + TS.esc(it.ten || '') + '</b>',
+      'Mã tài sản: <b>' + TS.esc(it.ma) + '</b>',
+      'Số thẻ: ' + TS.esc(it.sothe || '-'),
+      'Ngày đưa vào SD: ' + TS.esc(it.nam || '-'),
+      'Ngày kiểm kê: ' + TS.esc(it.ngaykk || '-'),
+      'Tình trạng: ' + TS.esc(it.tinhtrang || '-'),
+      'BP. Sử dụng: ' + TS.esc(it.bophan || '-')
+    ].map(function (s) { return '<div>' + s + '</div>'; }).join('');
+    return '<div class="lb vua">' +
+      '<div class="lb-unit">' + TS.esc(unitName || 'TEM TÀI SẢN') + '</div>' +
+      '<div class="lb-body"><div class="lb-lines">' + lines + '</div>' +
+      '<div class="lb-qr"><canvas data-qr="' + TS.esc(it.ma) + '"></canvas></div></div></div>';
+  }
+
+  function renderSheets() {
+    var items = Array.from(selection.values());
+    $('sel-count').textContent = items.length;
+    var chips = $('sel-chips');
+    chips.innerHTML = items.length ? '' : '<span class="muted">Chưa chọn tài sản nào.</span>';
+    items.forEach(function (it) {
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.innerHTML = TS.esc(it.ma) + ' <button type="button" title="Bỏ chọn">×</button>';
+      chip.querySelector('button').addEventListener('click', function () {
+        selection.delete(it.ma); saveSel(); renderSelection(); syncPickChecks();
+      });
+      chips.appendChild(chip);
+    });
+    var lay = layout();
+    var per = PER_PAGE[lay];
+    var area = $('print-area');
+    area.innerHTML = '';
+    for (var i = 0; i < items.length; i += per) {
+      var sheet = document.createElement('div');
+      sheet.className = 'sheet ' + lay;
+      sheet.innerHTML = items.slice(i, i + per).map(lay === 'lon' ? labelLon : labelVua).join('');
+      area.appendChild(sheet);
+    }
+    // Vẽ QR
+    area.querySelectorAll('canvas[data-qr]').forEach(function (cv) {
+      var url = TS.absoluteDetailUrl(cv.getAttribute('data-qr'));
+      if (typeof QRCode !== 'undefined') {
+        QRCode.toCanvas(cv, url, { width: 340, margin: 0, errorCorrectionLevel: 'M' }, function (err) {
+          if (err) cv.outerHTML = '<span class="small">' + TS.esc(url) + '</span>';
+        });
+      } else {
+        cv.outerHTML = '<span class="small">Không tải được thư viện QR — kiểm tra mạng.<br>' + TS.esc(url) + '</span>';
+      }
+    });
+  }
+
+  function renderSelection() { renderSheets(); }
+
+  function syncPickChecks() {
+    document.querySelectorAll('#pick-list input[type="checkbox"][data-ma]').forEach(function (cb) {
+      cb.checked = selection.has(cb.getAttribute('data-ma'));
+    });
+  }
+
+  /* ---------- pick list ---------- */
+  function renderPick(items) {
+    lastResults = items;
+    var box = $('pick-list');
+    if (!items.length) { box.innerHTML = '<p class="muted">Không có kết quả.</p>'; return; }
+    box.innerHTML = '';
+    items.forEach(function (it) {
+      var div = document.createElement('label');
+      div.className = 'pick-item';
+      div.innerHTML = '<input type="checkbox" data-ma="' + TS.esc(it.ma) + '">' +
+        '<span><span class="ten">' + TS.esc(it.ten || '') + '</span><br>' +
+        '<span class="small muted">' + TS.esc(it.ma) + ' • ' + TS.esc(it.bophan || '') +
+        (it.dain === 'Đã in' ? ' • <b>Đã in tem</b>' : ' • Chưa in tem') + '</span></span>';
+      var cb = div.querySelector('input');
+      cb.checked = selection.has(it.ma);
+      cb.addEventListener('change', function () {
+        if (cb.checked) selection.set(it.ma, it); else selection.delete(it.ma);
+        saveSel(); renderSelection();
+      });
+      box.appendChild(div);
+    });
+  }
+
+  async function doPickSearch() {
+    var msg = $('pick-msg'); msg.textContent = 'Đang tìm...'; msg.className = 'msg';
+    try {
+      var res = await TSApi.apiGet('search', {
+        q: $('q').value.trim(), bophan: $('bophan').value,
+        tinhtrang: '', dain: $('dain').value, page: 1, pageSize: 200
+      });
+      if (!res.ok) throw new Error(res.message || res.error);
+      msg.textContent = 'Tìm thấy ' + res.total + ' tài sản' + (res.total > res.items.length ? ' (hiển thị ' + res.items.length + ' đầu tiên — thu hẹp điều kiện tìm để chọn tiếp)' : '') + '.';
+      renderPick(res.items || []);
+    } catch (e) {
+      msg.textContent = e.message; msg.classList.add('err');
+    }
+  }
+
+  /* ---------- events ---------- */
+  document.addEventListener('DOMContentLoaded', async function () {
+    loadSel();
+    try {
+      var meta = await TS.loadMeta();
+      if (meta && meta.ok) {
+        unitName = (meta.config && meta.config.TenDonVi) || '';
+        (meta.facets.bophan || []).forEach(function (b) {
+          var o = document.createElement('option'); o.value = b; o.textContent = b; $('bophan').appendChild(o);
+        });
+        var def = (meta.config && meta.config.MauTemMacDinh) || '';
+        var lay = def.indexOf('3x7') !== -1 ? 'vua' : 'lon';
+        var radio = document.querySelector('input[name="layout"][value="' + lay + '"]');
+        if (radio) radio.checked = true;
+      }
+    } catch (e) { /* renderShell đã báo */ }
+    // ?add=MA từ trang chi tiết
+    var add = new URLSearchParams(location.search).get('add');
+    if (add && !selection.has(add) && TSApi.hasApi()) {
+      try {
+        var r = await TSApi.apiGet('getAsset', { id: add });
+        if (r.ok && r.item) { selection.set(r.item.ma, r.item); saveSel(); }
+      } catch (e) { /* bỏ qua */ }
+    }
+    renderSelection();
+  });
+
+  $('pick-form').addEventListener('submit', function (ev) { ev.preventDefault(); doPickSearch(); });
+  $('pick-all').addEventListener('click', function () {
+    lastResults.forEach(function (it) { selection.set(it.ma, it); });
+    saveSel(); renderSelection(); syncPickChecks();
+  });
+  $('pick-none').addEventListener('click', function () {
+    lastResults.forEach(function (it) { selection.delete(it.ma); });
+    saveSel(); renderSelection(); syncPickChecks();
+  });
+  $('sel-clear').addEventListener('click', function () {
+    selection.clear(); saveSel(); renderSelection(); syncPickChecks();
+  });
+  document.querySelectorAll('input[name="layout"]').forEach(function (r) {
+    r.addEventListener('change', renderSelection);
+  });
+  $('btn-print').addEventListener('click', function () {
+    if (!selection.size) { $('print-msg').textContent = 'Chưa chọn tài sản nào để in.'; $('print-msg').className = 'msg err'; return; }
+    window.print();
+  });
+  $('btn-mark').addEventListener('click', async function () {
+    var msg = $('print-msg'); msg.className = 'msg';
+    if (!selection.size) { msg.textContent = 'Chưa chọn tài sản nào.'; msg.classList.add('err'); return; }
+    var pin = '';
+    try { pin = sessionStorage.getItem('ts_pin') || ''; } catch (e) {}
+    if (!pin) {
+      pin = window.prompt('Nhập PIN quản trị (đặt trong sheet CAU_HINH):') || '';
+      if (!pin) return;
+    }
+    msg.textContent = 'Đang cập nhật...';
+    try {
+      var res = await TSApi.apiPost('markPrinted', { pin: pin, ids: Array.from(selection.keys()) });
+      if (!res.ok) {
+        if (res.error === 'WRONG_PIN') { try { sessionStorage.removeItem('ts_pin'); } catch (e) {} }
+        throw new Error(res.message || res.error);
+      }
+      try { sessionStorage.setItem('ts_pin', pin); } catch (e) {}
+      selection.forEach(function (it) { it.dain = 'Đã in'; });
+      saveSel(); renderSelection();
+      msg.textContent = 'Đã đánh dấu "Đã in tem" cho ' + res.updated + ' tài sản trong Google Sheet.';
+      msg.classList.add('ok');
+    } catch (e) {
+      msg.textContent = e.message; msg.classList.add('err');
+    }
+  });
+})();
+</script>
+</body>
+</html>
