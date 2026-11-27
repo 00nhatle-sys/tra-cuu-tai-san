@@ -24,7 +24,7 @@
     <h1 class="page">Tạo tem dán tài sản</h1>
     <div class="labels-grid">
 
-    <div class="card">
+    <div class="card pick-card">
       <b>1. Tìm và chọn tài sản cần in tem</b>
       <form id="pick-form" class="search-grid" style="margin-top:8px">
         <div>
@@ -46,14 +46,14 @@
         <button type="submit" class="btn">Tìm</button>
       </form>
       <p id="pick-msg" class="msg"></p>
-      <div id="pick-list"></div>
       <div class="btn-row">
         <button id="pick-all" class="btn secondary small" type="button">Chọn tất cả kết quả</button>
         <button id="pick-none" class="btn secondary small" type="button">Bỏ chọn kết quả này</button>
       </div>
+      <div id="pick-list"></div>
     </div>
 
-    <div class="card">
+    <div class="card sel-card">
       <b>2. Danh sách tem sẽ in (<span id="sel-count">0</span>)</b>
       <div id="sel-chips" style="margin-top:10px"></div>
       <div class="btn-row">
@@ -124,7 +124,7 @@
   }
   function labelVua(it) {
     var lines = [
-      'Tên tài sản: <b>' + TS.esc(it.ten || '') + '</b>',
+      '<span class="ln-name">Tên tài sản: <b>' + TS.esc(it.ten || '') + '</b></span>',
       'Mã tài sản: <b>' + TS.esc(it.ma) + '</b>',
       'Số thẻ: ' + TS.esc(it.sothe || '-'),
       'Ngày đưa vào SD: ' + TS.esc(it.nam || '-'),
@@ -173,6 +173,13 @@
         }
       } else {
         slot.innerHTML = '<span class="small">Không tải được thư viện QR.<br>' + TS.esc(url) + '</span>';
+      }
+    });
+    // Nếu nội dung vượt khung tem (tên tài sản dài), tự thu nhỏ dần cho vừa khung
+    area.querySelectorAll('.lb').forEach(function (lb) {
+      var tiers = ['nm1', 'nm2', 'nm3', 'nm4'], t = 0;
+      while (lb.scrollHeight > lb.clientHeight + 1 && t < tiers.length) {
+        lb.classList.add(tiers[t]); t++;
       }
     });
   }
