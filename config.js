@@ -7,6 +7,6 @@
 //   trình duyệt sẽ ghi nhớ và ưu tiên dùng giá trị đó.)
 // ============================================================
 window.APP_CONFIG = {
-  API_URL: '',
+  API_URL: 'https://script.google.com/macros/s/AKfycbwp3ZJmJ3en2jqWXfyIsasX3VFdy8gtMinCLGbYljRv6YvBX7-DucPXrxw08CS2q5mN/exec',
   SITE_NAME: 'Tra cứu tài sản cố định'
 };
