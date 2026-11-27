@@ -20,6 +20,7 @@
 <main>
   <div id="api-warning">Chưa cấu hình địa chỉ dữ liệu (Apps Script). Vào trang <a href="settings.html">Cài đặt</a> để nhập URL Web App.</div>
   <div id="detail"><p class="muted">Đang tải thông tin tài sản...</p></div>
+  <div id="kk-box"></div>
 </main>
 <footer class="site">Web tra cứu tài sản — dữ liệu lưu trên Google Sheet.</footer>
 
@@ -28,32 +29,89 @@
 <script src="assets/js/common.js"></script>
 <script>
 (function () {
+  var currentId = new URLSearchParams(location.search).get('id');
+  var lastItem = null;
+
   function row(label, value) {
     if (value === undefined || value === null || value === '') return '';
     return '<tr><th>' + TS.esc(label) + '</th><td>' + TS.esc(value) + '</td></tr>';
   }
 
-  document.addEventListener('DOMContentLoaded', async function () {
+  function todayStr() {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear();
+  }
+
+  function renderKk(it, note) {
+    var box = document.getElementById('kk-box');
+    var doneToday = it.ngaykk && it.ngaykk === todayStr();
+    var savedName = '';
+    try { savedName = localStorage.getItem('ts_kk_name') || ''; } catch (e) {}
+    box.innerHTML =
+      '<div class="card">' +
+        '<b>Kiểm kê tài sản</b>' +
+        '<p class="small" style="margin:8px 0">' + (doneToday
+          ? 'Tài sản này <b>đã được xác nhận kiểm kê hôm nay</b> (ngày ' + TS.esc(it.ngaykk) + ').'
+          : 'Ngày kiểm kê gần nhất: <b>' + TS.esc(it.ngaykk || '— chưa có —') + '</b>. Khi đã kiểm tra thực tế tài sản, bấm nút bên dưới để xác nhận.') + '</p>' +
+        '<label class="f" for="kk-name">Người kiểm kê (không bắt buộc)</label>' +
+        '<input type="text" id="kk-name" placeholder="Ví dụ: Nguyễn Văn A" value="' + TS.esc(savedName) + '" autocomplete="off">' +
+        '<div class="btn-row">' +
+          '<button id="btn-confirm-kk" class="btn" type="button">' + (doneToday ? 'Xác nhận kiểm kê lại' : 'Xác nhận kiểm kê') + '</button>' +
+        '</div>' +
+        '<p id="kk-msg" class="msg">' + (note ? TS.esc(note) : '') + '</p>' +
+        '<p class="small muted">Xác nhận sẽ ghi Ngày kiểm kê là ngày hôm nay vào Google Sheet. Thao tác ghi cần PIN quản trị (web chỉ hỏi 1 lần cho mỗi phiên làm việc).</p>' +
+      '</div>';
+    document.getElementById('btn-confirm-kk').addEventListener('click', confirmKk);
+  }
+
+  async function confirmKk() {
+    var msg = document.getElementById('kk-msg');
+    msg.className = 'msg';
+    var nameEl = document.getElementById('kk-name');
+    var name = nameEl ? nameEl.value.trim() : '';
+    try { localStorage.setItem('ts_kk_name', name); } catch (e) {}
+    var pin = '';
+    try { pin = sessionStorage.getItem('ts_pin') || ''; } catch (e) {}
+    if (!pin) {
+      pin = window.prompt('Nhập PIN quản trị (đặt trong sheet CAU_HINH):') || '';
+      if (!pin) return;
+    }
+    msg.textContent = 'Đang ghi xác nhận...';
+    try {
+      var res = await TSApi.apiPost('confirmInventory', { pin: pin, id: currentId, nguoikk: name });
+      if (!res.ok) {
+        if (res.error === 'WRONG_PIN') { try { sessionStorage.removeItem('ts_pin'); } catch (e) {} }
+        throw new Error(res.message || res.error);
+      }
+      try { sessionStorage.setItem('ts_pin', pin); } catch (e) {}
+      await loadDetail('Đã xác nhận kiểm kê ngày ' + res.ngaykk + '.');
+    } catch (e) {
+      msg.textContent = e.message; msg.classList.add('err');
+    }
+  }
+
+  async function loadDetail(note) {
     var box = document.getElementById('detail');
-    var id = new URLSearchParams(location.search).get('id');
-    if (!id) {
+    if (!currentId) {
       box.innerHTML = '<div class="card"><h1 class="page">Thiếu mã tài sản</h1>' +
         '<p>Đường link chưa có mã tài sản. Hãy quét lại mã QR trên tem hoặc <a href="index.html">về trang tra cứu</a>.</p></div>';
       return;
     }
     try {
-      var res = await TSApi.apiGet('getAsset', { id: id });
+      var res = await TSApi.apiGet('getAsset', { id: currentId });
       if (!res.ok) {
         if (res.error === 'NOT_FOUND') {
           box.innerHTML = '<div class="card"><h1 class="page">Không tìm thấy tài sản</h1>' +
-            '<p>Mã tài sản <b>' + TS.esc(id) + '</b> không có trong dữ liệu. Kiểm tra lại tem hoặc ' +
-            '<a href="index.html?q=' + encodeURIComponent(id) + '">tìm kiếm theo từ khoá này</a>.</p></div>';
+            '<p>Mã tài sản <b>' + TS.esc(currentId) + '</b> không có trong dữ liệu. Kiểm tra lại tem hoặc ' +
+            '<a href="index.html?q=' + encodeURIComponent(currentId) + '">tìm kiếm theo từ khoá này</a>.</p></div>';
         } else {
           throw new Error(res.message || res.error || 'Lỗi không rõ');
         }
+        document.getElementById('kk-box').innerHTML = '';
         return;
       }
       var it = res.item;
+      lastItem = it;
       document.title = it.ten || it.ma;
       var sdLabel = (it.nam && String(it.nam).length === 4) ? 'Năm đưa vào sử dụng' : 'Ngày đưa vào sử dụng';
       var tem = it.dain === 'Đã in' ? 'Đã in tem' + (it.ngayin ? ' (ngày ' + it.ngayin + ')' : '') : 'Chưa in tem';
@@ -72,15 +130,18 @@
             row('Trạng thái tem', tem) +
           '</table>' +
           '<div class="btn-row">' +
-            '<a class="btn" href="labels.html?add=' + encodeURIComponent(it.ma) + '">Tạo tem cho tài sản này</a>' +
+            '<a class="btn" href="labels.html?add=' + encodeURIComponent(it.ma) + '">In tem tài sản này ra A4</a>' +
             '<a class="btn secondary" href="scan.html">Quét mã khác</a>' +
             '<a class="btn secondary" href="index.html">Về tra cứu</a>' +
           '</div>' +
         '</div>';
+      renderKk(it, note);
     } catch (e) {
       box.innerHTML = '<div class="card"><h1 class="page">Không tải được thông tin</h1><p class="msg err">' + TS.esc(e.message) + '</p></div>';
     }
-  });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () { loadDetail(); });
 })();
 </script>
 </body>
